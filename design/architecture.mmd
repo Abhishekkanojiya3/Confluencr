@@ -1,0 +1,47 @@
+flowchart LR
+  subgraph Channels
+    WEB[Own website\nwebhook + DB/API]
+    NY[Nykaa\nwebhook + REST 5/s]
+    FK[Flipkart\npoller + bulk REST]
+    BL[Blinkit\nwebhook + CSV/API]
+  end
+
+  subgraph AWS[ AWS / containers ]
+    ING[Channel adapters\nNestJS API + pollers]
+    NORM[Canonical event\nnormalizer]
+    RES[Reservation worker\ntransactional stock]
+    ERPW[ERP outbox worker]
+    STOCKW[Stock push workers\nper-channel limiters]
+    RELAY[Outbox CDC relay\nSKIP LOCKED]
+    QUEUE[(SQS queues\nERP / stock / audit)]
+    OPS[Ops API/UI\nfailed sync retry]
+  end
+
+  PG[(RDS PostgreSQL\norders + inventory + ledger\noutbox + audit)]
+  REDIS[(ElastiCache Redis\nrate limits + short leases)]
+  ERP[Business Central\nERP API]
+
+  WEB --> ING
+  NY --> ING
+  FK --> ING
+  BL --> ING
+  ING --> NORM --> PG
+  PG --> RES
+  RES --> PG
+  PG --> RELAY --> QUEUE
+  QUEUE --> ERPW --> ERP
+  QUEUE --> STOCKW
+  QUEUE --> AUDIT[Audit/analytics consumer]
+  STOCKW --> WEB
+  STOCKW --> NY
+  STOCKW --> FK
+  STOCKW --> BL
+  STOCKW -. coordination .-> REDIS
+  OPS --> PG
+  OPS --> ERPW
+  OPS --> STOCKW
+
+  classDef db fill:#e8f1ff,stroke:#2563eb;
+  classDef ext fill:#fff7ed,stroke:#ea580c;
+  class PG,REDIS db;
+  class WEB,NY,FK,BL,ERP ext;
